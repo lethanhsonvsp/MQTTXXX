@@ -1,0 +1,709 @@
+﻿@page "/mqtt"
+@rendermode InteractiveAuto
+@using MQTTXXX.Shared
+@using Microsoft.AspNetCore.SignalR.Client
+@inject NavigationManager NavigationManager
+@inject IHttpClientFactory HttpClientFactory
+@inject IJSRuntime JSRuntime
+@using Newtonsoft.Json
+
+<div class="container-fluid mt-3">
+    <h3 class="mb-4">Bảng điều khiển MQTT Client</h3>
+    <div class="row">
+        <!-- Cột trái: Kết nối, Đăng ký, Gửi tin -->
+        <div class="col-md-4">
+            <!-- Giữ nguyên mã cho cột trái (Connection, Publish, Subscribe) -->
+            <div class="accordion" id="mqttAccordion">
+                <!-- Connection -->
+                <div class="accordion-item">
+                    <h2 class="accordion-header" id="headingConnection">
+                        <button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#collapseConnection" aria-expanded="true" aria-controls="collapseConnection">
+                            Kết nối
+                        </button>
+                    </h2>
+                    <div id="collapseConnection" class="accordion-collapse collapse show" aria-labelledby="headingConnection" data-bs-parent="#mqttAccordion">
+                        <div class="accordion-body">
+                            <div class="mb-2">
+                                <label class="form-label">URI Broker:</label>
+                                <input class="form-control" @bind="connection.BrokerUri" disabled="@connectionStatus" />
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label">Cổng:</label>
+                                <input type="number" class="form-control" @bind="connection.Port" disabled="@connectionStatus" />
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label">ID Client:</label>
+                                <input class="form-control" @bind="connection.ClientId" disabled="@connectionStatus" />
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label">Tên người dùng:</label>
+                                <input class="form-control" @bind="connection.Username" disabled="@connectionStatus" />
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label">Mật khẩu:</label>
+                                <input type="password" class="form-control" @bind="connection.Password" disabled="@connectionStatus" />
+                            </div>
+                            <div class="d-flex gap-2">
+                                <button class="btn btn-primary" @onclick="ConnectAsync" disabled="@connectionStatus">Kết nối</button>
+                                <button class="btn btn-secondary" @onclick="DisconnectAsync" disabled="@(!connectionStatus)">Ngắt kết nối</button>
+                            </div>
+                            <p class="mt-2 mb-0">Trạng thái: <span class="@(connectionStatus ? "text-success" : "text-danger")">@(connectionStatus ? "Đã kết nối" : "Chưa kết nối")</span></p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Publish -->
+                <div class="accordion-item">
+                    <h2 class="accordion-header" id="headingPublish">
+                        <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapsePublish" aria-expanded="false" aria-controls="collapsePublish">
+                            Gửi tin
+                        </button>
+                    </h2>
+                    <div id="collapsePublish" class="accordion-collapse collapse" aria-labelledby="headingPublish" data-bs-parent="#mqttAccordion">
+                        <div class="accordion-body">
+                            <div class="mb-2">
+                                <label class="form-label">Chủ đề:</label>
+                                <select class="form-select" @bind="message.Topic">
+                                    <option value="">Chọn chủ đề...</option>
+                                    @foreach (var topic in predefinedTopics)
+                                    {
+                                        <option value="@topic">@topic</option>
+                                    }
+                                </select>
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label">Nội dung (JSON đơn hoặc mảng JSON):</label>
+                                <textarea class="form-control" @bind="message.Payload" rows="5"></textarea>
+                            </div>
+                            <div class="d-flex gap-2 mb-2">
+                                <button class="btn btn-primary" @onclick="PublishAsync" disabled="@isPublishing">Gửi</button>
+                                <button class="btn btn-outline-secondary" @onclick="ClearPayload">Xóa</button>
+                                <button class="btn btn-outline-info" @onclick="FormatPayload">Định dạng JSON</button>
+                                <button class="btn btn-outline-warning" @onclick="ValidatePayload">Kiểm tra JSON</button>
+                            </div>
+                            @if (isPublishing)
+                            {
+                                <div class="progress mb-2">
+                                    <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: @(publishProgress * 100)%;">@((publishProgress * 100).ToString("F0"))%</div>
+                                </div>
+                            }
+                            @if (publishResults.Any())
+                            {
+                                <div class="alert alert-info alert-dismissible fade show" role="alert">
+                                    <strong>Kết quả gửi (@publishResults.Count):</strong>
+                                    <ul class="mb-0">
+                                        @foreach (var result in publishResults.Take(5))
+                                        {
+                                            <li class="@(result.Success ? "text-success" : "text-danger")">@result.Message</li>
+                                        }
+                                        @if (publishResults.Count > 5)
+                                        {
+                                            <li><a href="#" @onclick="ShowAllResults">Xem tất cả...</a></li>
+                                        }
+                                    </ul>
+                                    <button type="button" class="btn-close" @onclick="ClearPublishResults"></button>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Subscribe -->
+                <div class="accordion-item">
+                    <h2 class="accordion-header" id="headingSubscribe">
+                        <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseSubscribe" aria-expanded="false" aria-controls="collapseSubscribe">
+                            Đăng ký (@subscribedTopics.Count chủ đề)
+                        </button>
+                    </h2>
+                    <div id="collapseSubscribe" class="accordion-collapse collapse" aria-labelledby="headingSubscribe" data-bs-parent="#mqttAccordion">
+                        <div class="accordion-body">
+                            <div class="row">
+                                @foreach (var topic in predefinedTopics)
+                                {
+                                    <div class="col-6 mb-2">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" id="@topic" checked="@subscribedTopics.Contains(topic)" @onchange="@(e => ToggleSubscribeAsync(topic, e.Value != null && (bool)e.Value))" />
+                                            <label class="form-check-label" for="@topic">@topic</label>
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                            <div class="d-flex gap-2">
+                                <button class="btn btn-sm btn-outline-primary" @onclick="SubscribeAllAsync">Đăng ký tất cả</button>
+                                <button class="btn btn-sm btn-outline-secondary" @onclick="UnsubscribeAllAsync">Hủy đăng ký tất cả</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+
+        <!-- Cột phải: Tin nhắn -->
+        <div class="col-md-8">
+            <div class="card full-height">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span>Tin nhắn mới nhất (@filteredMessages.Count())</span>
+                    <div class="d-flex gap-2">
+                        <select class="form-select form-select-sm" @bind="filterTopic">
+                            <option value="">Tất cả chủ đề</option>
+                            @foreach (var topic in predefinedTopics)
+                            {
+                                <option value="@topic">@topic</option>
+                            }
+                        </select>
+                        <input class="form-control form-control-sm" style="width: 150px;" @bind="searchQuery" placeholder="Tìm kiếm..." @bind:event="oninput" />
+                        <button class="btn btn-sm btn-outline-secondary" @onclick="ToggleMessagesCollapse">
+                            @(isMessagesCollapsed ? "Mở rộng" : "Thu gọn")
+                        </button>
+                    </div>
+                </div>
+                <div class="@(isMessagesCollapsed ? "collapse" : "collapse show")" id="collapseMessages">
+                    <div class="card-body p-0 full-height">
+                        @if (filteredMessages.Any())
+                        {
+                            <div class="json-container">
+                                @foreach (var kvp in filteredMessages.Skip((currentPage - 1) * pageSize).Take(pageSize))
+                                {
+                                    <div class="json-message @(IsRecentlyUpdated(kvp.Key) ? "recently-updated" : "")" @key="kvp.Key">
+                                        @if (kvp.Key == "visualization" && kvp.Value is FilteredVisualizationData visData)
+                                        {
+                                            <div class="json-header">
+                                                <strong>Thời gian:</strong> @visData.Timestamp<br />
+                                                <strong>Chủ đề:</strong> @kvp.Key
+                                            </div>
+                                            <div class="json-payload">
+                                                <strong>Vị trí:</strong> X: @visData.AgvPosition!.X.ToString("F2"), Y: @visData.AgvPosition.Y.ToString("F2"), Theta: @visData.AgvPosition.Theta.ToString("F2")<br />
+                                                <strong>Tốc độ:</strong> Vx: @visData.Velocity!.Vx.ToString("F2"), Vy: @visData.Velocity.Vy.ToString("F2"), Omega: @visData.Velocity.Omega.ToString("F2")
+                                            </div>
+                                        }
+                                        else if (kvp.Key == "instantActions" && kvp.Value is FilteredInstantActionData actionData)
+                                        {
+                                            <div class="json-header">
+                                                <strong>Thời gian:</strong> @actionData.Timestamp<br />
+                                                <strong>Chủ đề:</strong> @kvp.Key<br />
+                                                <strong>Order ID:</strong> @actionData.OrderId
+                                            </div>
+                                            <div class="json-payload">
+                                                <strong>Hành động:</strong>
+                                                <ul>
+                                                    @foreach (var action in actionData.Actions!)
+                                                    {
+                                                        <li>
+                                                            <strong>ID:</strong> @action.ActionId<br />
+                                                            <strong>Loại:</strong> @action.ActionType<br />
+                                                            <strong>Trạng thái:</strong> @action.ActionDescription<br />
+                                                            <strong>Tham số:</strong>
+                                                            <ul>
+                                                                @foreach (var param in action.ActionParameters!)
+                                                                {
+                                                                    <li>@param.Key: @param.Value</li>
+                                                                }
+                                                            </ul>
+                                                        </li>
+                                                    }
+                                                </ul>
+                                            </div>
+                                        }
+                                        else
+                                        {
+                                            <div class="json-header">
+                                                <strong>Chủ đề:</strong> @kvp.Key
+                                            </div>
+                                            <div class="json-payload">
+                                                <strong>Nội dung:</strong>
+                                                <pre class="json-details">@(kvp.Value is MqttMessage msg ? FormatJson(msg.Payload) : JsonConvert.SerializeObject(kvp.Value, Formatting.Indented))</pre>
+                                            </div>
+                                        }
+                                    </div>
+                                }
+                            </div>
+                            <nav class="mt-2">
+                                <ul class="pagination pagination-sm justify-content-center">
+                                    <li class="page-item @(currentPage == 1 ? "disabled" : "")">
+                                        <a class="page-link" href="#" @onclick="() => ChangePage(currentPage - 1)">Trước</a>
+                                    </li>
+                                    @for (int i = 1; i <= totalPages; i++)
+                                    {
+                                        <li class="page-item @(i == currentPage ? "active" : "")">
+                                            <a class="page-link" href="#" @onclick="() => ChangePage(i)">@i</a>
+                                        </li>
+                                    }
+                                    <li class="page-item @(currentPage == totalPages ? "disabled" : "")">
+                                        <a class="page-link" href="#" @onclick="() => ChangePage(currentPage + 1)">Tiếp</a>
+                                    </li>
+                                </ul>
+                            </nav>
+                        }
+                        else
+                        {
+                            <p class="p-3 mb-0">Chưa nhận được tin nhắn.</p>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal cho kết quả gửi giữ nguyên -->
+</div>
+
+@code {
+    private MqttConnection connection = new()
+    {
+        BrokerUri = "172.20.235.170",
+        Port = 1886,
+        ClientId = "Demo",
+        Username = "robotics",
+        Password = "robotics"
+    };
+    private MqttMessage message = new();
+    private Dictionary<string, object> latestMessages = new();
+    private bool connectionStatus = false;
+    private HubConnection? hubConnection;
+    private HashSet<string> subscribedTopics = new();
+    private readonly List<string> predefinedTopics = new() { "visualization", "state", "order", "instantActions" };
+    private List<(bool Success, string Message)> publishResults = new();
+    private bool isPublishing = false;
+    private double publishProgress = 0;
+    private string filterTopic = string.Empty;
+    private string searchQuery = string.Empty;
+    private int currentPage = 1;
+    private int pageSize = 10;
+    private bool showAllResults = false;
+    private bool isMessagesCollapsed = false;
+    private Dictionary<string, DateTime> lastUpdateTimes = new();
+
+    private IEnumerable<KeyValuePair<string, object>> filteredMessages =>
+        latestMessages
+            .Where(m => string.IsNullOrEmpty(filterTopic) || m.Key == filterTopic)
+            .Where(m => string.IsNullOrEmpty(searchQuery) ||
+                        m.Key.Contains(searchQuery, StringComparison.OrdinalIgnoreCase) ||
+                        (m.Value is FilteredVisualizationData vis && vis.Timestamp!.Contains(searchQuery, StringComparison.OrdinalIgnoreCase)) ||
+                        (m.Value is FilteredInstantActionData act && act.Timestamp!.Contains(searchQuery, StringComparison.OrdinalIgnoreCase)))
+            .OrderBy(m => m.Key);
+
+    private int totalPages => (int)Math.Ceiling((double)filteredMessages.Count() / pageSize);
+
+    protected override async Task OnInitializedAsync()
+    {
+        hubConnection = new HubConnectionBuilder()
+            .WithUrl(NavigationManager.ToAbsoluteUri("/mqtthub"))
+            .WithAutomaticReconnect()
+            .Build();
+
+        hubConnection.On<bool>("ConnectionStatus", async status =>
+        {
+            await InvokeAsync(() =>
+            {
+                connectionStatus = status;
+                if (!status) subscribedTopics.Clear();
+                StateHasChanged();
+            });
+        });
+
+        hubConnection.On<MqttMessage>("ReceiveMessage", async msg =>
+        {
+            if (msg == null || string.IsNullOrEmpty(msg.Topic) || string.IsNullOrEmpty(msg.Payload))
+            {
+                Console.WriteLine("Received invalid message");
+                return;
+            }
+
+            try
+            {
+                object data = msg.Topic switch
+                {
+                    "visualization" => JsonConvert.DeserializeObject<FilteredVisualizationData>(msg.Payload) ?? new FilteredVisualizationData(),
+                    "instantActions" => JsonConvert.DeserializeObject<FilteredInstantActionData>(msg.Payload) ?? new FilteredInstantActionData(),
+                    _ => msg
+                };
+
+                if (data != null)
+                {
+                    await InvokeAsync(() =>
+                    {
+                        latestMessages[msg.Topic] = data;
+                        lastUpdateTimes[msg.Topic] = DateTime.UtcNow;
+                        if (latestMessages.Count > 100)
+                        {
+                            var oldestKey = latestMessages.Keys.OrderBy(k => lastUpdateTimes[k]).First();
+                            latestMessages.Remove(oldestKey);
+                            lastUpdateTimes.Remove(oldestKey);
+                        }
+                        StateHasChanged();
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error deserializing message for topic {msg.Topic}: {ex.Message}");
+            }
+        });
+
+        try
+        {
+            var savedTopics = await JSRuntime.InvokeAsync<string[]>("localStorage.getItem", "subscribedTopics");
+            if (savedTopics != null)
+                subscribedTopics = new HashSet<string>(savedTopics);
+        }
+        catch
+        {
+            // Ignore
+        }
+
+        try
+        {
+            await hubConnection.StartAsync();
+            await ShowToast("Ket noi SignalR.", "success");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Khong the khoi đong SignalR: {ex.Message}");
+            await ShowToast($"Khong the ket noi SignalR: {ex.Message}", "error");
+        }
+    }
+
+    private async Task ConnectAsync()
+    {
+        if (connectionStatus)
+        {
+            await ShowToast("Dang ket noi toi broker MQTT.", "warning");
+            return;
+        }
+
+        if (string.IsNullOrEmpty(connection.BrokerUri) || connection.Port <= 0 ||
+            string.IsNullOrEmpty(connection.ClientId))
+        {
+            await ShowToast("Vui lòng điền đầy đủ thông tin kết nối.", "warning");
+            return;
+        }
+
+        try
+        {
+            var httpClient = HttpClientFactory.CreateClient("MqttApi");
+            var response = await httpClient.PostAsJsonAsync("api/mqtt/connect", connection);
+            response.EnsureSuccessStatusCode();
+            await ShowToast("Đã kết nối với broker MQTT.", "success");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Lỗi khi kết nối với MQTT: {ex.Message}");
+            await ShowToast($"Kết nối thất bại: {ex.Message}", "error");
+        }
+    }
+
+    private async Task DisconnectAsync()
+    {
+        try
+        {
+            var httpClient = HttpClientFactory.CreateClient("MqttApi");
+            var response = await httpClient.PostAsync("api/mqtt/disconnect", null);
+            response.EnsureSuccessStatusCode();
+            subscribedTopics.Clear();
+            await JSRuntime.InvokeVoidAsync("localStorage.setItem", "subscribedTopics", subscribedTopics.ToArray());
+            await ShowToast("Đã ngắt kết nối với broker MQTT.", "success");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Lỗi khi ngắt kết nối với MQTT: {ex.Message}");
+            await ShowToast($"Ngắt kết nối thất bại: {ex.Message}", "error");
+        }
+    }
+
+    private async Task ToggleSubscribeAsync(string topic, bool subscribe)
+    {
+        if (string.IsNullOrEmpty(topic))
+        {
+            await ShowToast("Chủ đề không hợp lệ.", "warning");
+            return;
+        }
+
+        try
+        {
+            var httpClient = HttpClientFactory.CreateClient("MqttApi");
+            var response = subscribe
+                ? await httpClient.PostAsJsonAsync("api/mqtt/subscribe", topic)
+                : await httpClient.PostAsJsonAsync("api/mqtt/unsubscribe", topic);
+            response.EnsureSuccessStatusCode();
+
+            await InvokeAsync(() =>
+            {
+                if (subscribe)
+                {
+                    subscribedTopics.Add(topic);
+                }
+                else
+                {
+                    subscribedTopics.Remove(topic);
+                    latestMessages.Remove(topic);
+                }
+                StateHasChanged();
+            });
+
+            await JSRuntime.InvokeVoidAsync("localStorage.setItem", "subscribedTopics", subscribedTopics.ToArray());
+            await ShowToast($"{(subscribe ? "Đã đăng ký" : "Đã hủy đăng ký")} chủ đề: {topic}", "success");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Lỗi khi {(subscribe ? "đăng ký" : "hủy đăng ký")} chủ đề {topic}: {ex.Message}");
+            await ShowToast($"Thất bại khi {(subscribe ? "đăng ký" : "hủy đăng ký")} chủ đề: {ex.Message}", "error");
+        }
+    }
+
+    private async Task SubscribeAllAsync()
+    {
+        foreach (var topic in predefinedTopics)
+        {
+            if (!subscribedTopics.Contains(topic))
+                await ToggleSubscribeAsync(topic, true);
+        }
+    }
+
+    private async Task UnsubscribeAllAsync()
+    {
+        foreach (var topic in subscribedTopics.ToList())
+        {
+            await ToggleSubscribeAsync(topic, false);
+        }
+    }
+
+    private async Task PublishAsync()
+    {
+        if (string.IsNullOrEmpty(message.Topic) || string.IsNullOrEmpty(message.Payload))
+        {
+            await ShowToast("Vui lòng chọn chủ đề và nhập nội dung.", "warning");
+            return;
+        }
+
+        isPublishing = true;
+        publishResults.Clear();
+        publishProgress = 0;
+        await InvokeAsync(StateHasChanged);
+
+        var payloads = new List<string>();
+        try
+        {
+            var jsonElement = System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(message.Payload);
+            if (jsonElement.ValueKind == System.Text.Json.JsonValueKind.Array)
+                payloads.AddRange(jsonElement.EnumerateArray().Select(e => System.Text.Json.JsonSerializer.Serialize(e)));
+            else
+                payloads.Add(message.Payload);
+        }
+        catch (System.Text.Json.JsonException ex)
+        {
+            isPublishing = false;
+            await ShowToast($"Nội dung JSON không hợp lệ: {ex.Message}", "error");
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
+
+        var httpClient = HttpClientFactory.CreateClient("MqttApi");
+        for (int i = 0; i < payloads.Count; i++)
+        {
+            var payload = payloads[i];
+            for (int attempt = 1; attempt <= 3; attempt++)
+            {
+                try
+                {
+                    var tempMessage = new MqttMessage { Topic = message.Topic, Payload = payload };
+                    var response = await httpClient.PostAsJsonAsync("api/mqtt/publish", tempMessage);
+                    response.EnsureSuccessStatusCode();
+                    publishResults.Add((true, $"Đã gửi nội dung {i + 1}/{payloads.Count} tới chủ đề {message.Topic}"));
+                    break;
+                }
+                catch (Exception ex)
+                {
+                    if (attempt == 3)
+                    {
+                        Console.WriteLine($"Không thể gửi nội dung {i + 1} sau 3 lần thử: {ex.Message}");
+                        publishResults.Add((false, $"Thất bại nội dung {i + 1}/{payloads.Count}: {ex.Message}"));
+                    }
+                    else
+                    {
+                        await Task.Delay(500 * attempt);
+                    }
+                }
+            }
+            publishProgress = (double)(i + 1) / payloads.Count;
+            if (publishResults.Count > 50)
+                publishResults.RemoveAt(0);
+            await InvokeAsync(StateHasChanged);
+        }
+
+        isPublishing = false;
+        publishProgress = 1;
+        await InvokeAsync(StateHasChanged);
+        await ShowToast($"Đã gửi {publishResults.Count(p => p.Success)}/{payloads.Count} nội dung.", publishResults.Any(p => !p.Success) ? "warning" : "success");
+    }
+
+    private async Task ClearPayload()
+    {
+        message.Payload = string.Empty;
+        publishResults.Clear();
+        await InvokeAsync(StateHasChanged);
+        await ShowToast("Đã xóa nội dung.", "success");
+    }
+
+    private async Task FormatPayload()
+    {
+        try
+        {
+            var jsonElement = System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(message.Payload);
+            message.Payload = System.Text.Json.JsonSerializer.Serialize(jsonElement, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+            await InvokeAsync(StateHasChanged);
+            await ShowToast("Đã định dạng JSON.", "success");
+        }
+        catch (System.Text.Json.JsonException ex)
+        {
+            await ShowToast($"JSON không hợp lệ: {ex.Message}", "error");
+        }
+    }
+
+    private async Task ValidatePayload()
+    {
+        try
+        {
+            System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(message.Payload);
+            await ShowToast("JSON hợp lệ.", "success");
+        }
+        catch (System.Text.Json.JsonException ex)
+        {
+            await ShowToast($"JSON không hợp lệ: {ex.Message}", "error");
+        }
+    }
+
+    private async Task ClearPublishResults()
+    {
+        publishResults.Clear();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task ShowAllResults()
+    {
+        showAllResults = true;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task ChangePage(int page)
+    {
+        currentPage = Math.Clamp(page, 1, totalPages);
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task ToggleMessagesCollapse()
+    {
+        isMessagesCollapsed = !isMessagesCollapsed;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private bool IsRecentlyUpdated(string topic)
+    {
+        if (lastUpdateTimes.TryGetValue(topic, out var time))
+            return (DateTime.UtcNow - time).TotalSeconds < 2;
+        return false;
+    }
+
+    private string FormatJson(string payload)
+    {
+        try
+        {
+            var jsonElement = System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(payload);
+            return System.Text.Json.JsonSerializer.Serialize(jsonElement, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+        }
+        catch
+        {
+            return payload;
+        }
+    }
+
+    private async Task ShowToast(string message, string type)
+    {
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("showToast", message, type);
+        }
+        catch
+        {
+            Console.WriteLine($"Thông báo: {message} ({type})");
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (hubConnection != null)
+            await hubConnection.DisposeAsync();
+    }
+}
+
+<style>
+    .accordion-item {
+        border: 1px solid #dee2e6;
+        margin-bottom: 8px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+
+    .accordion-button {
+        font-weight: 500;
+    }
+
+        .accordion-button:not(.collapsed) {
+            background-color: #f8f9fa;
+        }
+
+    .full-height {
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .json-container {
+        padding: 10px;
+        flex-grow: 1;
+        overflow-y: auto;
+    }
+
+    .json-message {
+        border: 1px solid #dee2e6;
+        border-radius: 4px;
+        margin-bottom: 10px;
+        padding: 10px;
+        background-color: #fff;
+    }
+
+        .json-message.recently-updated {
+            background-color: #e7f3ff;
+        }
+
+    .json-header {
+        margin-bottom: 10px;
+        font-size: 14px;
+    }
+
+    .json-payload {
+        margin-top: 10px;
+    }
+
+    .json-details {
+        background-color: #f8f8f8;
+        padding: 10px;
+        border-radius: 4px;
+        max-height: none;
+        overflow-y: auto;
+        font-family: monospace;
+        font-size: 12px;
+        margin-top: 5px;
+        white-space: pre-wrap;
+    }
+
+    .form-check-input:checked {
+        background-color: #28a745;
+        border-color: #28a745;
+    }
+
+    .card-body.full-height {
+        flex-grow: 1;
+        display: flex;
+        flex-direction: column;
+    }
+</style>
