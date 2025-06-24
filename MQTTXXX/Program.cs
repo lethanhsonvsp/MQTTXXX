@@ -12,7 +12,7 @@ builder.Services.AddSignalR();
 builder.Services.AddMudServices();
 builder.Services.AddHttpClient("MqttApi", client =>
 {
-    client.BaseAddress = new Uri(builder.Configuration["ApiBaseUrl"] ?? "https://localhost:7197/");
+    client.BaseAddress = new Uri(builder.Configuration["ApiBaseUrl"] ?? "https://192.168.110.225:7197/");
 });
 builder.Services.AddControllers();
 builder.Services.AddSingleton<MqttService>();
