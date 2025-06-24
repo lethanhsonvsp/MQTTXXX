@@ -169,6 +169,7 @@
                                         @if (kvp.Key == "visualization" && kvp.Value is FilteredVisualizationData visData)
                                         {
                                             <div class="json-header">
+                                                <strong>headerId</strong> @visData.HeaderId<br />
                                                 <strong>Thời gian:</strong> @visData.Timestamp<br />
                                                 <strong>Chủ đề:</strong> @kvp.Key
                                             </div>

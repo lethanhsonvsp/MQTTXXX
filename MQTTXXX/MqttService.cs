@@ -69,6 +69,7 @@ public class MqttService(IHubContext<MqttHub> hubContext)
         if (data == null) return null!;
         return new FilteredVisualizationData
         {
+            HeaderId = data.HeaderId,
             Timestamp = data.Timestamp,
             AgvPosition = data.AgvPosition,
             Velocity = data.Velocity

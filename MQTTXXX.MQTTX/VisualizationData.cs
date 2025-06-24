@@ -26,6 +26,8 @@ public class VisualizationData
 }
 public class FilteredVisualizationData
 {
+    [JsonProperty("headerId")]
+    public uint HeaderId { get; set; }
     [JsonProperty("timestamp")]
     public string? Timestamp { get; set; }
     [JsonProperty("agvPosition")]
