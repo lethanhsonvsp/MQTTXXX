@@ -94,3 +94,29 @@ public class FilteredActionData
     [JsonProperty("actionParameters")]
     public Parameter[]? ActionParameters { get; set; }
 }
+
+public class FilteredOrderData
+{
+    [JsonProperty("timestamp")]
+    public string? Timestamp { get; set; }
+    [JsonProperty("orderId")]
+    public string? OrderId { get; set; }
+    [JsonProperty("orderUpdateId")]
+    public int? OrderUpdateId { get; set; }
+    [JsonProperty("zoneSetId")]
+    public string? ZoneSetId { get; set; }
+    [JsonProperty("lastNodeId")]
+    public string? LastNodeId { get; set; }
+    [JsonProperty("lastNodeSequenceId")]
+    public int? LastNodeSequenceId { get; set; }
+    [JsonProperty("driving")]
+    public bool Driving { get; set; }
+    [JsonProperty("paused")]
+    public bool Paused { get; set; }
+    [JsonProperty("newBaseRequest")]
+    public bool NewBaseRequest { get; set; }
+    [JsonProperty("distanceSinceLastNode")]
+    public float DistanceSinceLastNode { get; set; }
+    [JsonProperty("operatingMode")]
+    public string? OperatingMode { get; set; }
+}

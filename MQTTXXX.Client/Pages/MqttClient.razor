@@ -206,6 +206,23 @@
                                                 </ul>
                                             </div>
                                         }
+                                        else if (kvp.Key == "state" && kvp.Value is FilteredOrderData filteredOrderData)
+                                        {
+                                            <div class="json-header">
+                                                <strong>Thời gian:</strong> @filteredOrderData.Timestamp<br />
+                                                <strong>Chủ đề:</strong> @kvp.Key<br />
+                                                <strong>Order ID:</strong> @filteredOrderData.OrderId
+                                            </div>
+                                            <div class="json-payload">
+                                                <strong>OrderUpdate Id:</strong> @filteredOrderData.OrderUpdateId<br />
+                                                <strong>LastNode Id:</strong> @filteredOrderData.LastNodeId<br />
+                                                <strong>Driving:</strong> @filteredOrderData.Driving<br />
+                                                <strong>Paused:</strong> @filteredOrderData.Paused<br />
+                                                <strong>NewBaseRequest:</strong> @filteredOrderData.NewBaseRequest<br />
+                                                <strong>DistanceSinceLastNode:</strong> @filteredOrderData.DistanceSinceLastNode<br />
+
+                                            </div>
+                                        }
                                         else
                                         {
                                             <div class="json-header">
@@ -317,6 +334,7 @@
                 {
                     "visualization" => JsonConvert.DeserializeObject<FilteredVisualizationData>(msg.Payload) ?? new FilteredVisualizationData(),
                     "instantActions" => JsonConvert.DeserializeObject<FilteredInstantActionData>(msg.Payload) ?? new FilteredInstantActionData(),
+                    "state" => JsonConvert.DeserializeObject<FilteredOrderData>(msg.Payload) ?? new FilteredOrderData(),
                     _ => msg
                 };
 

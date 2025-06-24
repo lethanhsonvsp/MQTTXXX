@@ -45,6 +45,7 @@ public class MqttService(IHubContext<MqttHub> hubContext)
                 {
                     "visualization" => FilterVisualizationData(payload),
                     "instantActions" => FilterInstantActionData(payload),
+                    "state" => FilteredOrderData(payload),
                     _ => new MqttMessage { Topic = e.ApplicationMessage.Topic, Payload = payload }
                 };
 
@@ -94,6 +95,25 @@ public class MqttService(IHubContext<MqttHub> hubContext)
         };
     }
 
+    private static FilteredOrderData FilteredOrderData(string payload)
+    {
+        var data = JsonConvert.DeserializeObject<SendState>(payload);
+        if (data == null) return null!;
+        return new FilteredOrderData
+        {
+            Timestamp = data.Timestamp,
+            OrderId = data.OrderId,
+            OrderUpdateId = data.OrderUpdateId,
+            ZoneSetId = data.ZoneSetId,
+            LastNodeId = data.LastNodeId,
+            LastNodeSequenceId = data.LastNodeSequenceId,
+            Driving = data.Driving,
+            Paused = data.Paused,
+            NewBaseRequest = data.NewBaseRequest,
+            DistanceSinceLastNode = data.DistanceSinceLastNode,
+            OperatingMode = data.OperatingMode
+        };
+    }
     public async Task DisconnectAsync() => await _client.DisconnectAsync();
 
     public async Task SubscribeAsync(string topic)
