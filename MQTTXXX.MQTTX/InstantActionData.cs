@@ -73,7 +73,7 @@ public class NodePosition
     public string? MapDescription { get; set; }
 }
 
-public class FilteredInstantActionData
+public class FilteredActionData
 {
     [JsonProperty("timestamp")]
     public string? Timestamp { get; set; }
@@ -83,20 +83,22 @@ public class FilteredInstantActionData
     public FilteredActionData[]? Actions { get; set; }
 }
 
-public class FilteredActionData
+public class FilteredActionSate
 {
-    [JsonProperty("actionId")]
-    public string? ActionId { get; set; }
-    [JsonProperty("actionType")]
-    public string? ActionType { get; set; }
-    [JsonProperty("actionStatus")]
-    public string? ActionDescription { get; set; }
-    [JsonProperty("actionParameters")]
-    public Parameter[]? ActionParameters { get; set; }
+    [JsonProperty("actionStates")]
+    public ActionState[]? ActionStates { get; set; }
 }
 
-public class FilteredOrderData
+public class FilteredStateData
 {
+    [JsonProperty("headerId")]
+    public uint HeaderId { get; set; }
+    [JsonProperty("version")]
+    public string? Version { get; set; }
+    [JsonProperty("manufacturer")]
+    public string? Manufacturer { get; set; }
+    [JsonProperty("serialNumber")]
+    public string? SerialNumber { get; set; }
     [JsonProperty("timestamp")]
     public string? Timestamp { get; set; }
     [JsonProperty("orderId")]
@@ -119,4 +121,26 @@ public class FilteredOrderData
     public float DistanceSinceLastNode { get; set; }
     [JsonProperty("operatingMode")]
     public string? OperatingMode { get; set; }
+    [JsonProperty("map")]
+    public Map[]? Maps { get; set; }
+    [JsonProperty("nodeStates")]
+    public NodeState[]? NodeStates { get; set; }
+    [JsonProperty("edgeStates")]
+    public EdgeState[]? EdgeStates { get; set; }
+    [JsonProperty("agvPosition")]
+    public AgvPosition? AgvPosition { get; set; }
+    [JsonProperty("velocity")]
+    public Velocity? Velocity { get; set; }
+    [JsonProperty("loads")]
+    public Load[]? Loads { get; set; }
+    [JsonProperty("actionStates")]
+    public ActionState[]? ActionStates { get; set; }
+    [JsonProperty("batteryState")]
+    public BatteryState? BatteryState { get; set; }
+    [JsonProperty("errors")]
+    public Error[]? Errors { get; set; }
+    [JsonProperty("information")]
+    public Information[]? Information { get; set; }
+    [JsonProperty("safetyState")]
+    public SafetyState? SafetyState { get; set; }
 }

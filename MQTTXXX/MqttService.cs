@@ -36,7 +36,6 @@ public class MqttService(IHubContext<MqttHub> hubContext)
         {
             try
             {
-
                 var payload = Encoding.UTF8.GetString(e.ApplicationMessage.Payload.ToArray());
                 if (string.IsNullOrEmpty(payload) || string.IsNullOrEmpty(e.ApplicationMessage.Topic))
                     return;
@@ -44,8 +43,14 @@ public class MqttService(IHubContext<MqttHub> hubContext)
                 object filteredData = e.ApplicationMessage.Topic switch
                 {
                     "visualization" => FilterVisualizationData(payload),
-                    "instantActions" => FilterInstantActionData(payload),
-                    "state" => FilteredOrderData(payload),
+                    "state" => new
+                    {
+                        OrderData = FilteredSateData(payload),
+                        ActionStates = FilterActionStates(payload),
+                        BatteryState = FilterBatteryState(payload),
+                        Errors = FilterErrors(payload),
+                        Information = FilterInformation(payload)
+                    },
                     _ => new MqttMessage { Topic = e.ApplicationMessage.Topic, Payload = payload }
                 };
 
@@ -64,56 +69,108 @@ public class MqttService(IHubContext<MqttHub> hubContext)
         await _client.ConnectAsync(options, CancellationToken.None);
     }
 
-    private static FilteredVisualizationData FilterVisualizationData(string payload)
+    private static VisualizationData FilterVisualizationData(string payload)
     {
         var data = JsonConvert.DeserializeObject<VisualizationData>(payload);
         if (data == null) return null!;
-        return new FilteredVisualizationData
+        return new VisualizationData
         {
             HeaderId = data.HeaderId,
             Timestamp = data.Timestamp,
+            Version = data.Version,
+            Manufacturer = data.Manufacturer,
+            SerialNumber = data.SerialNumber,
+            MapId = data.MapId,
+            MapDescription = data.MapDescription,
             AgvPosition = data.AgvPosition,
             Velocity = data.Velocity
         };
     }
-
-    private static FilteredInstantActionData FilterInstantActionData(string payload)
-    { 
-        var data = JsonConvert.DeserializeObject<InstantActionData>(payload);
-        if (data == null) return null!;
-        return new FilteredInstantActionData
-        {
-            Timestamp = data.Timestamp,
-            OrderId = data.OrderId,
-            Actions = data.Actions?.Select(a => new FilteredActionData
-            {
-                ActionId = a.ActionId,
-                ActionType = a.ActionType,
-                ActionDescription = a.ActionStatus,
-                ActionParameters = a.ActionParameters
-            }).ToArray() ?? []
-        };
-    }
-
-    private static FilteredOrderData FilteredOrderData(string payload)
+    private static Sate FilteredSateData(string payload)
     {
-        var data = JsonConvert.DeserializeObject<SendState>(payload);
+        var data = JsonConvert.DeserializeObject<Sate>(payload);
         if (data == null) return null!;
-        return new FilteredOrderData
+        return new Sate
         {
+            HeaderId = data.HeaderId,
             Timestamp = data.Timestamp,
+            Version = data.Version,
+            Manufacturer = data.Manufacturer,
+            SerialNumber = data.SerialNumber,
+            Maps = data.Maps,
             OrderId = data.OrderId,
             OrderUpdateId = data.OrderUpdateId,
             ZoneSetId = data.ZoneSetId,
             LastNodeId = data.LastNodeId,
             LastNodeSequenceId = data.LastNodeSequenceId,
+            NodeStates = data.NodeStates,
+            EdgeStates = data.EdgeStates,
             Driving = data.Driving,
             Paused = data.Paused,
             NewBaseRequest = data.NewBaseRequest,
             DistanceSinceLastNode = data.DistanceSinceLastNode,
-            OperatingMode = data.OperatingMode
+            AgvPosition = data.AgvPosition,
+            Velocity = data.Velocity,
+            Loads = data.Loads,
+            OperatingMode = data.OperatingMode,
         };
     }
+
+    private static ActionState[] FilterActionStates(string payload)
+    {
+        var data = JsonConvert.DeserializeObject<Sate>(payload);
+        if (data == null || data.ActionStates == null) return [];
+        return [.. data.ActionStates.Select(state => new ActionState
+        {
+            ActionId = state.ActionId,
+            ActionType = state.ActionType,
+            ActionDescription = state.ActionDescription,
+            ActionStatus = state.ActionStatus,
+            ResultDescription = state.ResultDescription
+        })];
+    }
+
+    private static BatteryState FilterBatteryState(string payload)
+    {
+        var data = JsonConvert.DeserializeObject<Sate>(payload);
+        if (data == null || data.BatteryState == null) return null!;
+        return new BatteryState
+        {
+            BatteryCharge = data.BatteryState.BatteryCharge,
+            BatteryVoltage = data.BatteryState.BatteryVoltage,
+            BatteryHealth = data.BatteryState.BatteryHealth,
+            Charging = data.BatteryState.Charging,
+            Reach = data.BatteryState.Reach
+        };
+    }
+
+    private static Error[] FilterErrors(string payload)
+    {
+        var data = JsonConvert.DeserializeObject<Sate>(payload);
+        if (data == null || data.Errors == null) return [];
+        return [.. data.Errors.Select(error => new Error
+        {
+            ErrorType = error.ErrorType,
+            ErrorReferences = error.ErrorReferences,
+            ErrorDescription = error.ErrorDescription,
+            ErrorHint = error.ErrorHint,
+            ErrorLevel = error.ErrorLevel
+        })];
+    }
+
+    private static Information[] FilterInformation(string payload)
+    {
+        var data = JsonConvert.DeserializeObject<Sate>(payload);
+        if (data == null || data.Information == null) return [];
+        return [.. data.Information.Select(info => new Information
+        {
+            InfoType = info.InfoType,
+            InfoReferences = info.InfoReferences,
+            InfoDescription = info.InfoDescription,
+            InfoLevel = info.InfoLevel
+        })];
+    }
+
     public async Task DisconnectAsync() => await _client.DisconnectAsync();
 
     public async Task SubscribeAsync(string topic)
