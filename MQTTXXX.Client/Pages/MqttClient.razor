@@ -12,7 +12,7 @@
 <MudText Typo="Typo.h3" Class="mb-4">Bảng điều khiển MQTT Client</MudText>
 <MudGrid>
     <!-- Cột trái: Kết nối, Đăng ký, Gửi tin -->
-    <MudItem xs="12" md="4">
+    <MudItem xs="12" md="5">
         <MudExpansionPanels Elevation="1" Class="mb-4">
             <!-- Connection -->
             <MudExpansionPanel Text="Kết nối" IsExpanded="true">
@@ -37,7 +37,7 @@
                         <MudSelectItem Value="@topic">@topic</MudSelectItem>
                     }
                 </MudSelect>
-                <MudTextField @bind-Value="MqttService.Message.Payload" Label="Nội dung (JSON đơn hoặc mảng JSON)" Variant="Variant.Outlined" Lines="5" Margin="Margin.Dense" Class="mb-2" />
+                <MudTextField @bind-Value="MqttService.Message.Payload" Label="Nội dung (JSON đơn hoặc mảng JSON)" Variant="Variant.Outlined" Lines="25" Margin="Margin.Dense" Class="mb-2" />
                 <MudStack Row="true" Spacing="2" Class="mb-2">
                     <MudButton OnClick="MqttService.PublishAsync" Disabled="@MqttService.IsPublishing" Variant="Variant.Filled" Color="Color.Primary">Gửi</MudButton>
                     <MudButton OnClick="MqttService.ClearPayload" Variant="Variant.Outlined" Color="Color.Secondary">Xóa</MudButton>
@@ -89,7 +89,7 @@
     </MudItem>
 
     <!-- Cột phải: Tin nhắn -->
-    <MudItem xs="12" md="8">
+    <MudItem xs="12" md="7">
         <MudCard Elevation="1" Class="full-height">
             <MudCardHeader>
                 <CardHeaderContent>
